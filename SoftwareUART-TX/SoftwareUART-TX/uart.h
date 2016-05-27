@@ -1,7 +1,11 @@
 #ifndef UART_H_
 #define UART_H_
 
-extern volatile uint8_t UART_TxHead, UART_TxTail;
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+extern volatile uint8_t UART_TxHead;
+extern volatile uint8_t UART_TxTail;
 
 void Timer0_init();
 

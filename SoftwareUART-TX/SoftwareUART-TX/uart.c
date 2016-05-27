@@ -1,6 +1,6 @@
 #include "uart.h"
-#include <avr/interrupt.h>
-#define UART_BAUD_RATE = 9600.0
+
+#define UART_BAUD_RATE 9600.0
 
 #define UART_NUM_DATA_BITS 8
 
@@ -9,9 +9,9 @@
 #define UART_NUM_BITS (1 + UART_NUM_DATA_BITS)
 
 // MUST BE - multiple of two.
-#define UART_TX_BUF_SIZE 16
+#define UART_TX_BUF_SIZE 64
 
-#define UART_TX_BUF_MASK (UART_TX_BUF_MASK - 1)
+#define UART_TX_BUF_MASK (UART_TX_BUF_SIZE - 1)
 
 #define UART_PIN_SET (PORTB |= (1<<PB0))
 #define UART_PIN_CLEAR (PORTB &= ~(1<<PB0))
@@ -19,7 +19,8 @@
 #define TIM0_INT_EN TIMSK |= (1<<OCIE0A)
 #define TIM0_INT_DIS TIMSK &= ~(1<<OCIE0A)
 
-volatile uint8_t UART_TxHead, UART_TxTail;
+volatile uint8_t UART_TxHead;
+volatile uint8_t UART_TxTail;
 volatile char UART_TxBuf[UART_TX_BUF_SIZE];
 
 volatile uint8_t now_br;
@@ -39,10 +40,9 @@ void Timer0_init() {
 }
 
 void uart_send_byte(char data) {
-	if(UART_TxHead == UART_TxTail) {
+	if(UART_TxHead == UART_TxTail && !(TIMSK & (1<<OCIE0A))) {
 		 stop_bits = UART_STOP_BITS;
 		 TIM0_INT_EN;
-		 now_br = data;
 	}
 	UART_TxHead  = (UART_TxHead + 1) & UART_TX_BUF_MASK;
 	UART_TxBuf[UART_TxHead] = data;
@@ -56,24 +56,28 @@ ISR(TIMER0_COMPA_vect) {
 		return;
 	}
 	
+	if(!bit_sent_cnt) {
+		bit_sent_cnt = UART_NUM_BITS;
+		UART_PIN_SET;
+		if(UART_TxHead != UART_TxTail) {
+			stop_bits = UART_STOP_BITS - 1;
+			return;
+		}
+		stop_bits = UART_STOP_BITS;
+		TIM0_INT_DIS;
+		return;
+	}
+	
 	if(bit_sent_cnt == UART_NUM_BITS) {
+		
+		UART_TxTail = (UART_TxTail + 1) & UART_TX_BUF_MASK;
+		now_br = UART_TxBuf[UART_TxTail];
+		
 		bit_sent_cnt--;
 		UART_PIN_CLEAR;
 		return;
 	}
 	
 	bit_sent_cnt --;
-	now_br >> bit_sent_cnt & 0x01 == 0x01 ? UART_PIN_SET : UART_PIN_CLEAR;
-	
-	if(!bit_sent_cnt) {
-		bit_sent_cnt = UART_NUM_BITS;
-		stop_bits = UART_STOP_BITS;
-		if(UART_TxHead != UART_TxTail) {
-			UART_TxTail = (UART_TxTail + 1) & UART_TX_BUF_MASK;
-			now_br = UART_TxBuf[UART_TxTail];
-			return;
-		}
-		TIM0_INT_DIS;
-	}
-		
+	((now_br >> bit_sent_cnt) & (0x01)) == 0x01 ? UART_PIN_SET : UART_PIN_CLEAR;		
 }
