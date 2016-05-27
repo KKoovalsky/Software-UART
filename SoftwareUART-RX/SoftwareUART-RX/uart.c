@@ -81,7 +81,7 @@ void PCINT_init() {
 	 	}
 	 
 	 	//	Interpreting data sent.
-	 	if(UART_PIN_STATE) byte_rec |= ((1 << cycles_not_int) - 1) << bits_rec_cnt;
+	 	if(!UART_PIN_STATE) byte_rec |= ((1 << cycles_not_int) - 1) << bits_rec_cnt;
 	 
 	 	bits_rec_cnt = cycles_not_int;
 	 	cycles_not_int = 0;

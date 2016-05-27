@@ -79,5 +79,5 @@ ISR(TIMER0_COMPA_vect) {
 	}
 	
 	bit_sent_cnt --;
-	((now_br >> bit_sent_cnt) & (0x01)) == 0x01 ? UART_PIN_SET : UART_PIN_CLEAR;		
+	(now_br & (1 << (UART_NUM_DATA_BITS - bit_sent_cnt - 1))) ? UART_PIN_SET : UART_PIN_CLEAR;		
 }
