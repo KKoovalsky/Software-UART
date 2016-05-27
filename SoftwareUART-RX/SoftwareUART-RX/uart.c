@@ -59,6 +59,12 @@ void PCINT_init() {
  ISR(PCINT0_vect) {
 	 	//	Firstly read TCNT content to avoid inconsistency.
 	 	uint8_t TCNT_content = TCNT0;
+		 
+		 //	Start period count timer, when start bit's falling edge detected.
+		 if(cycles_not_int == 0xFF) {
+			 Timer0_start();
+			 return;
+		 }
 	 
 	 	//	If TCNT content is almost equal OCR content it is understood, that next bit was received.
 	 	cycles_not_int += (TCNT_content > UART_TCNT_MARGIN ? 1 : 0);
@@ -73,12 +79,6 @@ void PCINT_init() {
 		
 		//	Clear TCNT register.
 		TCNT0 = 0;
-	 
-	 	//	Start period count timer, when start bit's falling edge detected.
-	 	if(cycles_not_int == 0xFF) {
-		 		Timer0_start();
-		 		return;
-	 	}
 	 
 	 	//	Interpreting data sent.
 	 	if(!UART_PIN_STATE) byte_rec |= ((1 << cycles_not_int) - 1) << bits_rec_cnt;

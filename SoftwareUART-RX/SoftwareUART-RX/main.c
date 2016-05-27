@@ -21,10 +21,8 @@ int main(void)
 	
     while (1) {
 		char data = uart_getc();
-		char data_swp;
+		
 		if(data) {
-			data_swp = data;
-			data = 0x00;
 		}
     }
 }
