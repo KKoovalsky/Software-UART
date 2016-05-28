@@ -2,9 +2,9 @@
 
 #define UART_BAUD_RATE 9600.0
 
-#define UART_NUM_DATA_BITS 8
+#define UART_NUM_DATA_BITS (8)
 
-#define UART_STOP_BITS 1
+#define UART_STOP_BITS (1)
 
 #define UART_NUM_BITS (1 + UART_NUM_DATA_BITS)
 
@@ -12,7 +12,15 @@
 
 #define UART_TCNT_MARGIN (uint8_t)((F_CPU / 8.0 / UART_BAUD_RATE - 0.5) * 0.8)
 
-volatile uint8_t cycles_not_int;
+#define TCNT_CLEAR (TCNT0 = 0)
+
+#define CHECK_TIM_ENA (TIMSK & (1<<OCIE0A))
+
+#define CHECK_OCM_FLAG_SET (TIFR & (1<<OCF0A))
+
+#define CLEAR_OCM_FLAG (TIFR |= (1<<OCF0A))
+
+volatile uint8_t cycles_not_int = 0xFF;
 volatile uint8_t byte_rec;
 volatile uint8_t bits_rec_cnt;
 
@@ -22,12 +30,14 @@ volatile uint8_t UART_RxBuf[UART_RX_BUF_SIZE];
 
 inline void Timer0_start() {
 	TIMSK |= (1<<OCIE0A);
-	TCNT0 = 0;
+	TCNT_CLEAR;
+	CLEAR_OCM_FLAG;
 }
 
 inline void Timer0_stop() {
 	TIMSK &= ~(1<<OCIE0A);
-	TCNT0 = 0;
+	TCNT_CLEAR;
+	CLEAR_OCM_FLAG;
 }
 
 inline void UART_save(char * data) {
@@ -59,31 +69,31 @@ void PCINT_init() {
  ISR(PCINT0_vect) {
 	 	//	Firstly read TCNT content to avoid inconsistency.
 	 	uint8_t TCNT_content = TCNT0;
+		
+		//	Clear TCNT register.
+		TCNT_CLEAR;
 		 
-		 //	Start period count timer, when start bit's falling edge detected.
-		 if(cycles_not_int == 0xFF) {
-			 Timer0_start();
-			 return;
-		 }
+		//	Start period count timer, when start bit's falling edge detected.
+		if(!CHECK_TIM_ENA) {
+			Timer0_start();
+			return;
+		}
 	 
 	 	//	If TCNT content is almost equal OCR content it is understood, that next bit was received.
 	 	cycles_not_int += (TCNT_content > UART_TCNT_MARGIN ? 1 : 0);
 		 
 		//	If both edge and compare match took place:
-		if(TIFR & (1<<OCF0A)) {
-			cycles_not_int ++;
-			
+		if(CHECK_OCM_FLAG_SET) {
 			// To clear flag write logical one to it.
-			TIFR |= (1<<OCF0A); 	
+			CLEAR_OCM_FLAG;
+			// When TCNT set flag and got cleared.
+			if(TCNT_content < UART_TCNT_MARGIN) cycles_not_int++;
 		}
-		
-		//	Clear TCNT register.
-		TCNT0 = 0;
 	 
 	 	//	Interpreting data sent.
 	 	if(!UART_PIN_STATE) byte_rec |= ((1 << cycles_not_int) - 1) << bits_rec_cnt;
 	 
-	 	bits_rec_cnt = cycles_not_int;
+	 	bits_rec_cnt += cycles_not_int;
 	 	cycles_not_int = 0;
 	 
 	 	if(bits_rec_cnt == UART_NUM_DATA_BITS) {
@@ -101,11 +111,12 @@ void PCINT_init() {
  
  ISR(TIMER0_COMPA_vect) {
 	 	//	1 bit period ended
-	 	cycles_not_int = 1;
+	 	cycles_not_int += 1;
 	 
 	 	//	When last bit logic zero.
 	 	if(bits_rec_cnt + cycles_not_int == UART_NUM_DATA_BITS && UART_PIN_STATE) {
 		 		Timer0_stop();
+				byte_rec |= ((1 << cycles_not_int) - 1) << bits_rec_cnt;
 		 		cycles_not_int = 0xFF;
 		 		bits_rec_cnt = 0;
 				
